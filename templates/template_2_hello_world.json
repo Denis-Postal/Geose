@@ -1,0 +1,19 @@
+{
+  "name": "Hello World Text",
+  "description": "Adds Hello World text to center of screen",
+  "mods": [
+    {
+      "action": "addText",
+      "text": "hello world",
+      "x": 0.5,
+      "y": 0.5,
+      "options": {
+        "fontSize": "32px",
+        "fontFamily": "Arial",
+        "color": "#ffffff",
+        "backgroundColor": "#00000088"
+      },
+      "screenRelative": true
+    }
+  ]
+}

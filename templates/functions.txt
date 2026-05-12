@@ -1,0 +1,44 @@
+// Geose Modding - Supported Functions/Actions
+// This file lists all available mod actions
+
+// Visibility Actions
+hide - Hides a target object (makes invisible)
+show - Shows a target object (makes visible)
+
+// Position/Transform Actions  
+moveX - Moves object horizontally (requires: offset)
+moveY - Moves object vertically (requires: offset)
+setPosition - Sets absolute position (requires: x, y)
+setScale - Changes object scale (requires: scale)
+setRotation - Rotates object (requires: angle in degrees)
+
+// Appearance Actions
+changeColor - Changes object color/tint (requires: color in #RRGGBB format)
+changeTexture - Changes object texture/image (requires: texture name)
+changeAlpha - Changes object transparency (requires: alpha 0-1)
+
+// Text Actions
+addText - Adds new text to screen (requires: text, x, y, options)
+removeText - Removes text by ID (requires: textId)
+
+// Button Actions
+createButton - Creates new button (requires: texture, x, y, callback)
+removeButton - Removes button by ID (requires: buttonId)
+
+// Script Actions
+addScript - Injects custom JavaScript (requires: script path or inline code)
+modifyScript - Modifies existing script behavior
+
+// Texture Actions
+addTexture - Registers new texture (requires: key, path)
+replaceTexture - Replaces existing texture
+
+// Advanced Actions
+animate - Creates animation tween (requires: property, target, duration)
+setInteractive - Enables/disables interaction (requires: value true/false)
+setDepth - Changes render order (requires: depth value)
+
+// Game Logic
+setSpeed - Changes game speed (requires: speed multiplier)
+forcePlatformer - Toggles platformer mode (requires: enabled true/false)
+rainbowIcon - Toggles rainbow icon effect (requires: enabled true/false)

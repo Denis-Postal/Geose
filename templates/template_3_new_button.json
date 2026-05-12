@@ -1,0 +1,16 @@
+{
+  "name": "New Play Button",
+  "description": "Creates a new play button at bottom of screen that does nothing",
+  "mods": [
+    {
+      "action": "createButton",
+      "id": "newPlayBtn",
+      "texture": "GJ_button01",
+      "x": 0.5,
+      "y": 0.85,
+      "scale": 0.5,
+      "screenRelative": true,
+      "callback": null
+    }
+  ]
+}

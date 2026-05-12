@@ -1,0 +1,8 @@
+{
+  "mods": [
+    {
+      "action": "hide",
+      "target": "playButton"
+    }
+  ]
+}

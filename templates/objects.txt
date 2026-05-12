@@ -1,0 +1,24 @@
+// Geose Modding - Supported Objects
+// This file lists all game objects that can be modified via mods
+
+// Main Menu Objects
+playButton - The main play button (_playBtn)
+iconButton - Icon selector button (_iconBtn)  
+creatorButton - Level creator button (_creatorBtn)
+modsButton - Geose mods button (_modsBtn)
+logo - Game logo (_logo)
+robtopLogo - RobTop logo (_robLogo)
+copyrightText - Copyright text (_copyrightText)
+tryMeImg - Try me image (_tryMeImg)
+
+// Background
+mainmenuBG - Main menu background (_bg)
+
+// Game Objects
+player - The player object (_player)
+gameLayer - The game layer (_gameLayer)
+
+// Containers
+modsContentContainer - Mods menu content container (_modsContentContainer)
+
+// Additional objects can be added here as they are implemented
