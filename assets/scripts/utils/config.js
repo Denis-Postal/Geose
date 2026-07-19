@@ -12,6 +12,7 @@ window.currentBall   = localStorage.getItem("iconCurrentBall")   || "player_ball
 window.currentWave   = localStorage.getItem("iconCurrentWave")   || "dart_01";
 window.currentSpider = localStorage.getItem("iconCurrentSpider") || "spider_01";
 window.currentBird   = localStorage.getItem("iconCurrentBird")   || "bird_01";
+window.currentRobot  = localStorage.getItem("iconCurrentRobot")  || "robot_01";
 window.currentlevel = [
 	"stereo_madness", // internal level name
 	"Stereo Madness", // proper level name

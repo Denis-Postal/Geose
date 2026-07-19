@@ -69,6 +69,7 @@ class AudioManager {
     const startOffset = window.settingsMap['kA13'] ? new Number(window.settingsMap['kA13']) : 0;
     this._music.seek = startOffset + StartPosOffset;
     this._setupAnalyser();
+    this._musicPlaying = true;
   }
   _playOnlineBuffer(audioBuffer, startOffset = 0) {
     const soundMgr = this._scene.game.sound;
@@ -138,6 +139,7 @@ class AudioManager {
     };
 
     this._music = musicObj;
+    this._musicPlaying = true;
   }
   startMenuMusic() {
     if (this._music) {
@@ -150,11 +152,29 @@ class AudioManager {
     });
     this._music.play();
     this._setupAnalyser();
+    this._musicPlaying = true;
+  }
+  get musicPlaying() {
+    return !!(this._music && this._music.isPlaying);
   }
   stopMusic() {
     if (this._music) {
       this._music.stop();
+      if (this._music.destroy) {
+        this._music.destroy();
+      }
+      this._music = null;
     }
+    if (this._onlineSource) {
+      try { this._onlineSource.stop(); } catch(e) {}
+      try { this._onlineSource.disconnect(); } catch(e) {}
+      this._onlineSource = null;
+    }
+    if (this._onlineGain) {
+      try { this._onlineGain.disconnect(); } catch(e) {}
+      this._onlineGain = null;
+    }
+    this._musicPlaying = false;
   }
   isplaying() {
     return this._music != null && this._music.isPlaying != false;

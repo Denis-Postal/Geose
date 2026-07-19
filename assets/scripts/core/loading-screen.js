@@ -248,12 +248,20 @@ class BootScene extends Phaser.Scene {
       this.load.image("bigFont", "assets/fonts/bigFont.png");
       this.load.text("bigFontFnt", "assets/fonts/bigFont.fnt");
       this.load.image("square04_001", "assets/sprites/square04_001.png");
+      this.load.image("robotFireBoost", "assets/sprites/fireBoost_001.png");
       this.load.image("GJ_square02", "assets/sprites/GJ_square02.png");
       this.load.image("GJ_square01", "assets/sprites/GJ_square01.png");
       this.load.image("square01_001", "assets/sprites/square01_001.png");
       this.load.image("loadingCircle", "assets/sprites/loadingCircle.png");
       this.load.image("GJ_button01", "assets/sprites/GJ_button_01.png");
       this.load.image("GJ_button02", "assets/sprites/GJ_button_02.png");
+      [
+        "unrated", "easy", "normal", "hard", "harder", "insane",
+        "demon-easy", "demon-medium", "demon-hard", "demon-insane", "demon-extreme",
+        "demon", "auto"
+      ].forEach((name) => {
+        this.load.image("gd_diff_" + name, "assets/gdbrowser/difficulties/" + name + ".png");
+      });
       
       // Geose mod system textures (with transparency support)
       this.load.image("geose_icon", "assets/Geose/Texture/icon.png?v=" + Date.now());

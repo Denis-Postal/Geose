@@ -11,6 +11,7 @@
     this.slopeDir = 1;
     this.slopeIsFilled = false;
     this.slopeFlipY = false;
+    this.slopeFloorTop = false;
   }
   getSlopeSurfaceY(worldX) {
     if (this.type !== slopeType) return null;
@@ -117,6 +118,7 @@ const ringType = "ring";
 const triggerType = "trigger";
 const speedType = "speed";
 const slopeType = "slope";
+const teleportPortalType = "portal_teleport";
 // в”Ђв”Ђ Slope ID registry в”Ђв”Ђ
 const _SLOPE_DATA = {
   289:{gw:1,gh:1,angle:45,sq:false},291:{gw:2,gh:1,angle:22.5,sq:false},
@@ -226,10 +228,57 @@ const _SLOPE_DATA = {
   1901:{gw:0.367,gh:0.433,angle:45,sq:true},1902:{gw:0.967,gh:0.45,angle:45,sq:true},
   1906:{gw:1,gh:1,angle:45,sq:false},1907:{gw:2,gh:1,angle:22.5,sq:false},
 };
+
+function buildSlopeCollider(levelObj, objectDef, worldX, worldY, scaleUnit) {
+  const slopeData = _SLOPE_DATA[levelObj.id];
+  if (!slopeData) return null;
+
+  let flipX = levelObj.flipX || false;
+  let flipY = levelObj.flipY || false;
+  const normalizedRot = ((Math.round(levelObj.rot || 0) % 360) + 360) % 360;
+  if (normalizedRot === 90) {
+    const oldFlipX = flipX;
+    flipX = !flipY;
+    flipY = oldFlipX;
+  } else if (normalizedRot === 180) {
+    flipX = !flipX;
+    flipY = !flipY;
+  } else if (normalizedRot === 270) {
+    const oldFlipX = flipX;
+    flipX = flipY;
+    flipY = !oldFlipX;
+  }
+
+  const width = (objectDef.gridW > 0 ? objectDef.gridW : slopeData.gw) * scaleUnit;
+  const height = (objectDef.gridH > 0 ? objectDef.gridH : slopeData.gh) * scaleUnit;
+  if (!(width > 0) || !(height > 0)) return null;
+
+  const slopeCol = new Collider(slopeType, worldX, worldY, width, height, levelObj.rot || 0);
+  slopeCol.slopeDir = flipX ? -1 : 1;
+  slopeCol.slopeFlipY = flipY;
+  slopeCol.slopeFloorTop = flipY;
+  slopeCol.slopeAngleDeg = slopeData.angle || 45;
+  slopeCol.slopeIsFilled = slopeData.sq || false;
+  slopeCol.objid = levelObj.id;
+  return slopeCol;
+}
+
+function hasMatchingSlopeCollider(objects, slopeCol) {
+  return objects.some(col =>
+    col.type === slopeType &&
+    Math.abs(col.x - slopeCol.x) < 0.01 &&
+    Math.abs(col.y - slopeCol.y) < 0.01 &&
+    col.slopeDir === slopeCol.slopeDir &&
+    col.slopeFlipY === slopeCol.slopeFlipY &&
+    col.w >= slopeCol.w - 1 &&
+    col.h >= slopeCol.h - 1
+  );
+}
 const flyPortal = "fly";
 const cubePortal = "cube";
 const portalWaveType = "portal_wave";
 const portalUfoType = "portal_ufo";
+const portalRobotType = "portal_robot";
 const allObjects = window.allobjects();
 if (!allObjects[1331]) {
   allObjects[1331] = {
@@ -268,6 +317,27 @@ window._animatedSprites = [];
 window._animTimer = 0;
 function getObjectFromId(id) {
   return allObjects[id] || null;
+}
+
+function isTeleportPortalObject(levelObj, objectDef) {
+  const frameName = objectDef && objectDef.frame ? String(objectDef.frame) : "";
+  return levelObj.id === 747 ||
+    levelObj.id === 1933 ||
+    levelObj.id === 2926 ||
+    levelObj.id === 3027 ||
+    frameName.includes("portal_15") ||
+    frameName.includes("portal_18") ||
+    frameName.includes("portal_19") ||
+    frameName.includes("teleportRing");
+}
+
+function isTeleportPartnerPortalObject(levelObj, objectDef) {
+  const worldX = levelObj.x * 2;
+  if (worldX < 11800 || worldX > 13200) {
+    return false;
+  }
+  return levelObj.id === 10 || levelObj.id === 11 ||
+    (objectDef && objectDef.frame && (String(objectDef.frame).includes("portal_01") || String(objectDef.frame).includes("portal_02")));
 }
 
 window.LevelObject = class LevelObject {
@@ -320,6 +390,7 @@ window.LevelObject = class LevelObject {
     this._groupOffsets = {};
     this._groupOpacity = {};
     this._groupColliders = {};
+    this._teleportPortals = [];
     this._sections = [];
     this._sectionContainers = [];
     this._collisionSections = [];
@@ -353,9 +424,81 @@ window.LevelObject = class LevelObject {
       settings: settingslist
     } = parseLevel(levelData);
     window.settingslist = settingslist;
+    this._teleportPortals = [];
+    this._logTeleportCandidates(levelObjects);
     this._spawnLevelObjects(levelObjects);
     this._setUpSettings(settingslist);
     window.levelObjects = levelObjects;
+  }
+
+  _registerTeleportPortal(collider) {
+    collider.teleportOrder = this._teleportPortals.length;
+    this._teleportPortals.push(collider);
+    this._rebuildTeleportLinks();
+  }
+
+  _rebuildTeleportLinks() {
+    for (const portal of this._teleportPortals) {
+      portal.teleportTarget = null;
+      portal.isTeleportExit = false;
+    }
+
+    for (let i = 0; i < this._teleportPortals.length; i += 2) {
+      const first = this._teleportPortals[i];
+      const second = this._teleportPortals[i + 1];
+      if (!first || !second) continue;
+      first.teleportTarget = second;
+      second.isTeleportExit = true;
+    }
+  }
+
+  _logTeleportPortals() {
+    if (window.debugTeleportPortals === false) {
+      return;
+    }
+    const pairs = this._teleportPortals.map((portal, index) => ({
+      index,
+      order: portal.teleportOrder,
+      objid: portal.objid,
+      x: Math.round(portal.x),
+      y: Math.round(portal.y),
+      variant: portal.teleportVariant,
+      target: portal.teleportTarget
+        ? { order: portal.teleportTarget.teleportOrder, x: Math.round(portal.teleportTarget.x), y: Math.round(portal.teleportTarget.y) }
+        : null,
+      exit: portal.isTeleportExit === true
+    }));
+    console.info(`[teleport] portals loaded count=${pairs.length} ${pairs.map(p => `#${p.index}/order=${p.order}:id=${p.objid}:v=${p.variant}@${p.x},${p.y}->${p.target ? `order=${p.target.order}@${p.target.x},${p.target.y}` : "null"}`).join(" | ")}`);
+  }
+
+  _logTeleportCandidates(levelObjects) {
+    if (window.debugTeleportPortals === false) {
+      return;
+    }
+    const candidates = [];
+    const nearbyPortalLike = [];
+    for (const levelObj of levelObjects) {
+      const objectDef = getObjectFromId(levelObj.id);
+      const frameName = objectDef && objectDef.frame ? String(objectDef.frame) : "null";
+      const worldX = Math.round(levelObj.x * 2);
+      const worldY = Math.round(levelObj.y * 2);
+      if (isTeleportPortalObject(levelObj, objectDef)) {
+        candidates.push(`id=${levelObj.id} frame=${frameName} @${worldX},${worldY}`);
+      }
+      if (
+        worldX >= 11800 && worldX <= 13200 &&
+        (
+          frameName.includes("portal") ||
+          frameName.includes("ring") ||
+          objectDef?.type === portalType ||
+          objectDef?.type === ringType
+        )
+      ) {
+        nearbyPortalLike.push(`id=${levelObj.id} type=${objectDef?.type || "null"} frame=${frameName} @${worldX},${worldY} rot=${levelObj.rot || 0} raw55=${levelObj._raw?.[55] || "0"}`);
+      }
+    }
+    console.info(`[teleport] candidates count=${candidates.length} ${candidates.join(" | ")}`);
+    console.info(`[teleport] nearby portal-like count=${nearbyPortalLike.length} ${nearbyPortalLike.join(" | ")}`);
   }
   _setUpSettings(settingsStr) {
     this._initialColors = {};
@@ -695,19 +838,9 @@ window.LevelObject = class LevelObject {
           dy: -(customData.gjSpriteOffset.y || 0)
         };
       }
-      let realWidth = frame.realWidth;
-      let realHeight = frame.realHeight;
-      let frameWidth = frame.width;
-      let frameHeight = frame.height;
-      let sourceX = 0;
-      let sourceY = 0;
-      if (customData.spriteSourceSize) {
-        sourceX = customData.spriteSourceSize.x || 0;
-        sourceY = customData.spriteSourceSize.y || 0;
-      }
       return {
-        dx: realWidth / 2 - (sourceX + frameWidth / 2),
-        dy: realHeight / 2 - (sourceY + frameHeight / 2)
+        dx: 0,
+        dy: 0
       };
     }(scene, frameName);
     if (objectData.flipX) {
@@ -739,6 +872,7 @@ window.LevelObject = class LevelObject {
         sprite.setTint(colorData.tint);
       } else if (colorData.black) {
         sprite.setTint(0);
+        sprite._eeForceBlack = true;
       }
     }
   }
@@ -929,7 +1063,7 @@ window.LevelObject = class LevelObject {
         const _col2 = levelObj.color2 || (objectDef.default_detail_color_channel !== undefined ? objectDef.default_detail_color_channel : -1);
         const _canColor = objectDef.can_color !== false;
         const _registerColor = (spr, ch) => {
-          if (ch > 0 && _canColor && spr && !spr._isSaw) {
+          if (ch > 0 && _canColor && spr && !spr._isSaw && !spr._eeForceBlack) {
             spr._eeColorChannel = ch;
             if (!this._colorChannelSprites[ch]) this._colorChannelSprites[ch] = [];
             this._colorChannelSprites[ch].push(spr);
@@ -1049,7 +1183,7 @@ window.LevelObject = class LevelObject {
             overlaySprite._eeZDepth = _objZDepth + 0.002;
             overlaySprite._eeOrigAlpha = 1;
             let _oc2 = _col2;
-            if (_oc2 <= 0) _oc2 = 2;
+            if (_oc2 <= 0) _oc2 = _col1;
             _registerColor(overlaySprite, _oc2);
             this._addToSection(overlaySprite);
             _registerToGroups(overlaySprite, worldX, baseY);
@@ -1198,7 +1332,14 @@ window.LevelObject = class LevelObject {
             }
           }
         };
-        if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
+        const slopeCollider = buildSlopeCollider(levelObj, objectDef, worldX, worldY, a);
+        if (slopeCollider) {
+          if (!hasMatchingSlopeCollider(this.objects, slopeCollider)) {
+            _registerCollider(slopeCollider);
+            this.objects.push(slopeCollider);
+            this._addCollisionToSection(slopeCollider);
+          }
+        } else if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
           let _0x10e5ae = objectDef.gridW * a;
           let _0x11e08d = objectDef.gridH * a;
           let _0x4628ff = new Collider(solidType, worldX, worldY, _0x10e5ae, _0x11e08d, levelObj.rot || 0);
@@ -1229,6 +1370,17 @@ window.LevelObject = class LevelObject {
             this.objects.push(_0x3c84ad);
             this._addCollisionToSection(_0x3c84ad);
           }
+        } else if (isTeleportPortalObject(levelObj, objectDef) || isTeleportPartnerPortalObject(levelObj, objectDef)) {
+          let teleportW = objectDef.gridW * a;
+          let teleportH = objectDef.gridH * a;
+          let teleportObj = new Collider(teleportPortalType, worldX, worldY, teleportW, teleportH, levelObj.rot || 0);
+          teleportObj.objid = levelObj.id;
+          teleportObj.portalY = worldY;
+          teleportObj.teleportVariant = isTeleportPortalObject(levelObj, objectDef) ? 1 : 0;
+          _registerCollider(teleportObj);
+          this._registerTeleportPortal(teleportObj);
+          this.objects.push(teleportObj);
+          this._addCollisionToSection(teleportObj);
         } else if (objectDef.type === portalType) {
 
           let _0xad0974 = objectDef.gridW * a;
@@ -1242,10 +1394,12 @@ window.LevelObject = class LevelObject {
             46: "mirrorb",
             47: "ball",
             660: "wave",
+            745: "robot",
             111: "ufo",
             1331: "spider",
             286: "dual_on",
             287: "dual_off",
+            1933: "teleport",
           }[levelObj.id];
           if (levelObj.id === 111) {
           }
@@ -1259,6 +1413,7 @@ window.LevelObject = class LevelObject {
             ball: "portal_ball",
             wave: portalWaveType,
             ufo: portalUfoType,
+            robot: portalRobotType,
             spider: "portal_spider",
             mirrora: "portal_mirror_on",
             mirrorb: "portal_mirror_off",
@@ -1266,6 +1421,7 @@ window.LevelObject = class LevelObject {
             grow: "portal_mini_off",
             dual_on: "portal_dual_on",
             dual_off: "portal_dual_off",
+            teleport: teleportPortalType,
           }[_0x5bcd81] || null;
           if (levelObj.id === 111) {
           }
@@ -1275,6 +1431,9 @@ window.LevelObject = class LevelObject {
             let _0x4bd7bc = new Collider(_0x25452a, worldX, worldY, _0xad0974, _0x2c2226, levelObj.rot || 0);
             _0x4bd7bc.portalY = worldY;
             _registerCollider(_0x4bd7bc);
+            if (_0x25452a === teleportPortalType) {
+              this._registerTeleportPortal(_0x4bd7bc);
+            }
             this.objects.push(_0x4bd7bc);
             this._addCollisionToSection(_0x4bd7bc);
           } else {
@@ -1346,6 +1505,8 @@ window.LevelObject = class LevelObject {
         if (sc.additive && sc.additive.list && sc.additive.list.length > 1) sc.additive.sort('depth');
       }
     }
+    this._rebuildTeleportLinks();
+    this._logTeleportPortals();
     this.endXPos = Math.max(screenWidth + 1200, this._lastObjectX + 680);
   }
   _spawnObject(levelObj) {
@@ -1511,7 +1672,7 @@ window.LevelObject = class LevelObject {
     const canColor = objectDef.can_color !== false;
 
     const registerColor = (spr, ch) => {
-      if (ch > 0 && canColor && spr && !spr._isSaw) {
+      if (ch > 0 && canColor && spr && !spr._isSaw && !spr._eeForceBlack) {
         spr._eeColorChannel = ch;
         if (!this._colorChannelSprites[ch]) this._colorChannelSprites[ch] = [];
         this._colorChannelSprites[ch].push(spr);
@@ -1643,7 +1804,7 @@ window.LevelObject = class LevelObject {
         overlaySprite._eeOrigAlpha = 1;
 
         let oc2 = col2;
-        if (oc2 <= 0) oc2 = 2;
+        if (oc2 <= 0) oc2 = col1;
         registerColor(overlaySprite, oc2);
 
         this._addToSection(overlaySprite);
@@ -1810,7 +1971,14 @@ window.LevelObject = class LevelObject {
       }
     };
 
-    if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
+    const slopeCollider = buildSlopeCollider(levelObj, objectDef, worldX, worldY, a);
+    if (slopeCollider) {
+      if (!hasMatchingSlopeCollider(this.objects, slopeCollider)) {
+        registerCollider(slopeCollider);
+        this.objects.push(slopeCollider);
+        this._addCollisionToSection(slopeCollider);
+      }
+    } else if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
       const w = objectDef.gridW * a;
       const h = objectDef.gridH * a;
       const collider = new Collider(solidType, worldX, worldY, w, h, levelObj.rot || 0);
@@ -1850,6 +2018,17 @@ window.LevelObject = class LevelObject {
         this.objects.push(collider);
         this._addCollisionToSection(collider);
       }
+    } else if (isTeleportPortalObject(levelObj, objectDef) || isTeleportPartnerPortalObject(levelObj, objectDef)) {
+      const teleportW = objectDef.gridW * a;
+      const teleportH = objectDef.gridH * a;
+      const teleportObj = new Collider(teleportPortalType, worldX, worldY, teleportW, teleportH, levelObj.rot || 0);
+      teleportObj.objid = levelObj.id;
+      teleportObj.portalY = worldY;
+      teleportObj.teleportVariant = isTeleportPortalObject(levelObj, objectDef) ? 1 : 0;
+      registerCollider(teleportObj);
+      this._registerTeleportPortal(teleportObj);
+      this.objects.push(teleportObj);
+      this._addCollisionToSection(teleportObj);
     } else if (objectDef.type === portalType) {
       const portalW = objectDef.gridW * a;
       const portalH = objectDef.gridH * a;
@@ -1862,10 +2041,12 @@ window.LevelObject = class LevelObject {
         46: "mirrorb",
         47: "ball",
         660: "wave",
+        745: "robot",
         111: "ufo",
         1331: "spider",
         286: "dual_on",
-        287: "dual_off"
+        287: "dual_off",
+        1933: "teleport"
       }[levelObj.id];
 
       const portalColliderType = {
@@ -1878,19 +2059,24 @@ window.LevelObject = class LevelObject {
         ball: "portal_ball",
         wave: portalWaveType,
         ufo: portalUfoType,
+        robot: portalRobotType,
         spider: "portal_spider",
         mirrora: "portal_mirror_on",
         mirrorb: "portal_mirror_off",
         shrink: "portal_mini_on",
         grow: "portal_mini_off",
         dual_on: "portal_dual_on",
-        dual_off: "portal_dual_off"
+        dual_off: "portal_dual_off",
+        teleport: teleportPortalType
       }[portalSub] || null;
 
       if (portalColliderType) {
         const collider = new Collider(portalColliderType, worldX, worldY, portalW, portalH, levelObj.rot || 0);
         collider.portalY = worldY;
         registerCollider(collider);
+        if (portalColliderType === teleportPortalType) {
+          this._registerTeleportPortal(collider);
+        }
         this.objects.push(collider);
         this._addCollisionToSection(collider);
       }
@@ -2417,6 +2603,7 @@ window.LevelObject = class LevelObject {
           const pulseHex = (pr << 16) | (pg << 8) | pb;
           for (const spr of sprites) {
             if (!spr || !spr.active) continue;
+            if (spr._eeForceBlack) { spr.setTint(0); continue; }
             if (intensity > 0.01) { spr.setTint(pulseHex); spr._eePulsed = true; }
             else { spr.clearTint(); spr._eePulsed = false; }
           }
@@ -2434,6 +2621,7 @@ window.LevelObject = class LevelObject {
           if (chSprites) {
             for (const spr of chSprites) {
               if (!spr || !spr.active) continue;
+              if (spr._eeForceBlack) { spr.setTint(0); continue; }
               spr.setTint(pulseHex); spr._eePulsed = true;
             }
           }
@@ -2442,7 +2630,13 @@ window.LevelObject = class LevelObject {
       if (pulse.elapsed >= pulse.totalDuration) {
         if (trig.targetType === 1 && trig.targetGroup > 0) {
           const sprites = this._groupSprites[trig.targetGroup];
-          if (sprites) for (const spr of sprites) { if (spr && spr.active) { spr.clearTint(); spr._eePulsed = false; } }
+          if (sprites) for (const spr of sprites) {
+            if (spr && spr.active) {
+              if (spr._eeForceBlack) spr.setTint(0);
+              else spr.clearTint();
+              spr._eePulsed = false;
+            }
+          }
         }
         if (trig.targetType === 0 && trig.targetChannel > 0) {
           const chSprites = this._colorChannelSprites[trig.targetChannel];
@@ -2466,6 +2660,7 @@ window.LevelObject = class LevelObject {
         if (!spr || !spr.active) continue;
         if (spr._eePulsed) continue;
         if (spr._isSaw) continue;
+        if (spr._eeForceBlack) { spr.setTint(0); continue; }
         if (spr._eeAudioScale) continue;
         spr.setTint(hex);
       }

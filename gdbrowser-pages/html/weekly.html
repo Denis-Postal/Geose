@@ -1,0 +1,46 @@
+<head>
+  <title>Weekly Demon</title>
+  <meta charset="utf-8">
+  <link href="../assets/css/browser.css?v=1" type="text/css" rel="stylesheet">
+  <link rel="icon" href="../assets/crown-weekly.png">
+</head>
+<body class="levelBG darkBG" onbeforeunload="saveUrl()">
+<div id="everything" class="center">
+  <div style="position:absolute; top: 2%; left: -1.95%; width: 10%; height: 25%; pointer-events: none">
+    <img class="gdButton yesClick" id="backButton" src="../assets/back.png" height="30%" onclick="backButton()">
+  </div>
+  <div class="center" style="margin: 2.5% auto 2% auto; width: 70%;">
+    <h1 style="transform:scale(1.2)">Weekly Demon</h1>
+  </div>
+  <img id="loading" class="spin noSelect" src="../assets/loading.png" height="12%">
+  <div id="levelBox" class="searchresult" style="display:none; width: 120vh; height: 28%; margin: 5% auto 0; position: relative; text-align: left;">
+    <img id="diff" src="../assets/difficulties/demon.png" style="position:absolute; left:5%; top:23%; height:45%">
+    <h1 id="name" class="smaller" style="position:absolute; left:23%; top:12%"></h1>
+    <h2 id="author" class="inline yellow" style="position:absolute; left:23%; top:40%"></h2>
+    <h3 id="song" class="inline blue" style="position:absolute; left:23%; top:62%"></h3>
+    <a id="view"><img class="gdButton" src="../assets/view.png" style="position:absolute; right:7%; top:31%; height:38%"></a>
+  </div>
+</div>
+</body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="../global.js?v=1"></script>
+<script>
+const diffMap = {
+  "N/A": "unrated", "Unrated": "unrated", "Easy": "easy", "Normal": "normal",
+  "Hard": "hard", "Harder": "harder", "Insane": "insane", "Demon": "demon",
+  "Easy Demon": "demon-easy", "Medium Demon": "demon-medium", "Hard Demon": "demon-hard",
+  "Insane Demon": "demon-insane", "Extreme Demon": "demon-extreme", "Auto": "auto"
+};
+fetch("https://gdbrowser.com/api/level/weekly").then(r => r.json()).then(level => {
+  $("#loading").hide();
+  $("#name").text(level.name || "Weekly Demon");
+  $("#author").text("By " + (level.author || "-"));
+  $("#song").text(level.songName || "Unknown Song");
+  $("#diff").attr("src", `../assets/difficulties/${diffMap[level.difficulty] || "demon"}.png`);
+  $("#view").attr("href", "/?id=" + level.id).on("click", event => {
+    event.preventDefault();
+    launchGeoseLevel(level.id);
+  });
+  $("#levelBox").show();
+}).catch(() => $("#loading").hide());
+</script>
